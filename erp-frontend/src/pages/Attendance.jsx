@@ -11,6 +11,8 @@ import {
   searchStudentsAPI,
   getCoursesAPI,
   getStudentsByCourseAPI,
+  getBatchesAPI,
+  getStudentsByBatchAPI,
   markAttendanceBulkAPI,
   checkAttendanceBulkAPI,
 } from "../api"
@@ -61,6 +63,7 @@ export default function Attendance() {
   const [selectedStudent, setSelectedStudent] = useState(null)
 
   const [courses, setCourses]             = useState([])
+  const [batches, setBatches]             = useState([])
   const [selectedCourse, setSelectedCourse] = useState("")
   const [courseStudents, setCourseStudents] = useState([])
   const [summaries, setSummaries]         = useState({})
@@ -73,7 +76,7 @@ export default function Attendance() {
 
   const [attPage, setAttPage]             = useState(1)
 
-  const [bulkCourse, setBulkCourse]       = useState("")
+  const [bulkBatch, setBulkBatch]         = useState("")
   const [bulkDate, setBulkDate]           = useState(new Date().toISOString().split("T")[0])
   const [bulkStudents, setBulkStudents]   = useState([])
   const [bulkAttendance, setBulkAttendance] = useState({})
@@ -84,7 +87,7 @@ export default function Attendance() {
   const [bulkError, setBulkError]         = useState("")
 
   useEffect(() => { fetchAttendance() }, [])
-  useEffect(() => { if (isAdmin) loadCourses() }, [isAdmin])
+  useEffect(() => { if (isAdmin) { loadCourses(); loadBatches() } }, [isAdmin])
   useEffect(() => {
     if (success) { const t = setTimeout(() => setSuccess(""), 3000); return () => clearTimeout(t) }
   }, [success])
@@ -111,6 +114,13 @@ export default function Attendance() {
     try {
       const res = await getCoursesAPI()
       setCourses(res.data.courses || [])
+    } catch { /* silent */ }
+  }
+
+  async function loadBatches() {
+    try {
+      const res = await getBatchesAPI()
+      setBatches(res.data.batches || [])
     } catch { /* silent */ }
   }
 
@@ -246,11 +256,11 @@ export default function Attendance() {
   }
 
   async function handleLoadBulkStudents() {
-    if (!bulkCourse || !bulkDate) { setBulkError("Select a course and date first"); return }
+    if (!bulkBatch || !bulkDate) { setBulkError("Select a batch and date first"); return }
     setBulkError(""); setBulkSuccess("")
     setBulkLoading(true); setBulkStudents([]); setBulkAttendance({}); setBulkOriginal({})
     try {
-      const studRes = await getStudentsByCourseAPI(bulkCourse)
+      const studRes = await getStudentsByBatchAPI(bulkBatch)
       const students = studRes.data.students || []
       setBulkStudents(students)
 
@@ -282,7 +292,7 @@ export default function Attendance() {
       const records = unmarked.map(s => ({ student_id: s.id, date: bulkDate, status: bulkAttendance[s.id] || "present" }))
       await markAttendanceBulkAPI({ records })
       setBulkSuccess(`Attendance marked for ${records.length} student${records.length > 1 ? "s" : ""}!`)
-      const checkRes = await checkAttendanceBulkAPI({ course: bulkCourse, date: bulkDate })
+      const checkRes = await checkAttendanceBulkAPI({ date: bulkDate, student_ids: bulkStudents.map(s => s.id) })
       const existing = {}
       const checkData = checkRes.data?.records || checkRes.data || []
       if (Array.isArray(checkData)) { checkData.forEach(r => { existing[r.student_id] = r.status }) }
@@ -580,21 +590,24 @@ export default function Attendance() {
 
             <div className="flex flex-wrap gap-3 items-end mb-4">
               <div className="flex-1 min-w-[200px]">
-                <label className="form-label">Course</label>
-                <select value={bulkCourse} onChange={e => { setBulkCourse(e.target.value); setBulkStudents([]); setBulkAttendance({}); setBulkOriginal({}); setBulkSuccess(""); setBulkError("") }}
+                <label className="form-label">Batch</label>
+                <select value={bulkBatch} onChange={e => { setBulkBatch(e.target.value); setBulkStudents([]); setBulkAttendance({}); setBulkOriginal({}); setBulkSuccess(""); setBulkError("") }}
                   className="inp bg-white">
-                  <option value="">— Select a course —</option>
-                  {courses.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}{c.duration ? ` (${c.duration})` : ""}</option>
+                  <option value="">— Select a batch —</option>
+                  {batches.map(b => (
+                    <option key={b} value={b}>{b}</option>
                   ))}
                 </select>
+                {batches.length === 0 && (
+                  <p className="text-xs text-orange-500 mt-1">No batches yet. Assign batches to students on the <a href="/students" className="underline">Students page</a>.</p>
+                )}
               </div>
               <div>
                 <label className="form-label">Date</label>
                 <input type="date" value={bulkDate} onChange={e => { setBulkDate(e.target.value); setBulkStudents([]); setBulkAttendance({}); setBulkOriginal({}); setBulkSuccess(""); setBulkError("") }}
                   className="inp w-auto" />
               </div>
-              <button onClick={handleLoadBulkStudents} disabled={bulkLoading || !bulkCourse || !bulkDate}
+              <button onClick={handleLoadBulkStudents} disabled={bulkLoading || !bulkBatch || !bulkDate}
                 className="btn bg-slate-700 hover:bg-slate-800 text-white disabled:opacity-50">
                 {bulkLoading ? "Loading…" : "Load Students"}
               </button>
@@ -686,12 +699,12 @@ export default function Attendance() {
               </>
             )}
 
-            {!bulkLoading && bulkStudents.length === 0 && bulkCourse && (
-              <EmptyState icon="📋" title='Click "Load Students" to fetch students for this course and date.' />
+            {!bulkLoading && bulkStudents.length === 0 && bulkBatch && (
+              <EmptyState icon="📋" title='Click "Load Students" to fetch students for this batch and date.' />
             )}
 
-            {!bulkCourse && (
-              <EmptyState icon="📝" title='Select a course and date above, then click "Load Students".' />
+            {!bulkBatch && (
+              <EmptyState icon="📝" title='Select a batch and date above, then click "Load Students".' />
             )}
           </div>
         )}

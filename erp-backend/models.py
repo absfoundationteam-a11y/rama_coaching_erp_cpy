@@ -17,6 +17,7 @@ class StudentDB(Base):
     permanent_address = Column(String(500), nullable=True)
     local_address = Column(String(500), nullable=True)
     course = Column(String(100), nullable=True)
+    batch = Column(String(100), nullable=True)
     fees = Column(Float, nullable=True)
     school_college_name = Column(String(200), nullable=True)
     medium = Column(String(20), nullable=True)          # hindi / english
