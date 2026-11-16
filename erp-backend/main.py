@@ -307,6 +307,7 @@ def run_migrations():
         "ALTER TABLE students ADD COLUMN IF NOT EXISTS inst4_amount FLOAT",
         "ALTER TABLE students ADD COLUMN IF NOT EXISTS inst5_date DATE",
         "ALTER TABLE students ADD COLUMN IF NOT EXISTS inst5_amount FLOAT",
+        "ALTER TABLE students ADD COLUMN IF NOT EXISTS batch VARCHAR(100)",
         """CREATE TABLE IF NOT EXISTS expenses (
             id SERIAL PRIMARY KEY,
             title VARCHAR(200) NOT NULL,
@@ -458,6 +459,7 @@ class Student(BaseModel):
     permanent_address: Optional[str] = None
     local_address: Optional[str] = None
     course: Optional[str] = None
+    batch: Optional[str] = None
     fees: Optional[float] = None
     fees_paid: Optional[float] = None      # amount already paid at time of import
     school_college_name: Optional[str] = None
@@ -477,6 +479,10 @@ class StudentBulk(BaseModel):
 class BulkUpdateCourse(BaseModel):
     student_ids: List[int]
     course: str
+
+class BulkUpdateBatch(BaseModel):
+    student_ids: List[int]
+    batch: str
 
 class AttendanceCreate(BaseModel):
     student_id: int
@@ -1062,6 +1068,7 @@ def add_student(
         permanent_address=student.permanent_address,
         local_address=student.local_address,
         course=student.course,
+        batch=student.batch,
         fees=student.fees,
         school_college_name=student.school_college_name,
         medium=student.medium,
@@ -1132,6 +1139,7 @@ def _student_dict_from_map(s, ac_map: dict):
         "permanent_address": s.permanent_address,
         "local_address": s.local_address,
         "course": s.course,
+        "batch": s.batch,
         "fees": s.fees,
         "school_college_name": s.school_college_name,
         "medium": s.medium,
@@ -1261,6 +1269,7 @@ def update_student(
     student.permanent_address = updated_data.permanent_address
     student.local_address = updated_data.local_address
     student.course = updated_data.course
+    student.batch = updated_data.batch
     student.fees = updated_data.fees
     student.school_college_name = updated_data.school_college_name
     student.medium = updated_data.medium
@@ -1301,6 +1310,41 @@ def bulk_update_course(
         student = db.query(StudentDB).filter(StudentDB.id == sid).first()
         if student:
             student.course = data.course
+            updated += 1
+    db.commit()
+    return {"message": f"{updated} student(s) updated", "updated": updated}
+
+
+@app.get("/batches")
+def get_batches(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    rows = db.query(StudentDB.batch).filter(StudentDB.batch != None, StudentDB.batch != "").distinct().all()
+    return {"batches": sorted([r[0] for r in rows])}
+
+
+@app.get("/students/batch/{batch_name}")
+def get_students_by_batch(
+    batch_name: str,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles(["admin", "teacher", "staff"]))
+):
+    students = db.query(StudentDB).filter(StudentDB.batch == batch_name).all()
+    if not students:
+        return {"students": []}
+    ac_map = _build_additional_courses_map(db, [s.id for s in students])
+    return {"students": [_student_dict_from_map(s, ac_map) for s in students]}
+
+
+@app.put("/students/bulk-update-batch")
+def bulk_update_batch(
+    data: BulkUpdateBatch,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_role("admin"))
+):
+    updated = 0
+    for sid in data.student_ids:
+        student = db.query(StudentDB).filter(StudentDB.id == sid).first()
+        if student:
+            student.batch = data.batch
             updated += 1
     db.commit()
     return {"message": f"{updated} student(s) updated", "updated": updated}
@@ -1390,6 +1434,7 @@ def import_students(
                 permanent_address=student.permanent_address,
                 local_address=student.local_address,
                 course=student.course,
+                batch=student.batch,
                 fees=student.fees,
                 school_college_name=student.school_college_name,
                 medium=student.medium,

@@ -10,6 +10,8 @@ import {
   deleteStudentAPI,
   getCoursesAPI,
   bulkUpdateCourseAPI,
+  bulkUpdateBatchAPI,
+  getBatchesAPI,
   setStudentAdditionalCoursesAPI,
   getStudentCredentialsAPI,
   updateStudentCredentialsAPI,
@@ -27,6 +29,7 @@ const EMPTY_FORM = {
   permanent_address: "",
   local_address: "",
   course: "",
+  batch: "",
   fees: "",
   school_college_name: "",
   medium: "",
@@ -41,9 +44,11 @@ const EMPTY_FORM = {
 
 export default function Students() {
   const [courses, setCourses] = useState([])
+  const [batches, setBatches] = useState([])
   const [students, setStudents] = useState([])
   const [search, setSearch] = useState("")
   const [courseFilter, setCourseFilter] = useState("all")
+  const [batchFilter, setBatchFilter] = useState("all")
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -57,7 +62,9 @@ export default function Students() {
   const [additionalCourseIds, setAdditionalCourseIds] = useState([])
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkCourse, setBulkCourse] = useState("")
+  const [bulkBatch, setBulkBatch] = useState("")
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
+  const [bulkBatchSubmitting, setBulkBatchSubmitting] = useState(false)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 20
   const [loginModal, setLoginModal] = useState(null)
@@ -74,7 +81,7 @@ export default function Students() {
   const [reportResult, setReportResult]     = useState(null) // { success, message }
   const [bulkResult, setBulkResult]         = useState(null) // { sent, failed, total }
 
-  useEffect(() => { fetchStudents(); fetchCourses() }, [])
+  useEffect(() => { fetchStudents(); fetchCourses(); fetchBatches() }, [])
 
   useEffect(() => {
     if (success) {
@@ -102,14 +109,16 @@ export default function Students() {
         s.name?.toLowerCase().includes(q) ||
         s.email?.toLowerCase().includes(q) ||
         s.course?.toLowerCase().includes(q) ||
+        s.batch?.toLowerCase().includes(q) ||
         s.school_college_name?.toLowerCase().includes(q) ||
         s.student_code?.toLowerCase().includes(q)
       const matchCourse = courseFilter === "all" || s.course === courseFilter
-      return matchText && matchCourse
+      const matchBatch  = batchFilter  === "all" || s.batch  === batchFilter
+      return matchText && matchCourse && matchBatch
     })
-  }, [search, students, courseFilter])
+  }, [search, students, courseFilter, batchFilter])
 
-  useEffect(() => { setPage(1) }, [search, courseFilter])
+  useEffect(() => { setPage(1) }, [search, courseFilter, batchFilter])
 
   async function fetchStudents() {
     try {
@@ -126,6 +135,15 @@ export default function Students() {
     try {
       const res = await getCoursesAPI()
       setCourses(res.data.courses)
+    } catch {
+      // non-fatal
+    }
+  }
+
+  async function fetchBatches() {
+    try {
+      const res = await getBatchesAPI()
+      setBatches(res.data.batches || [])
     } catch {
       // non-fatal
     }
@@ -178,6 +196,7 @@ export default function Students() {
       permanent_address: form.permanent_address?.trim() || null,
       local_address: form.local_address?.trim() || null,
       course: form.course?.trim() || null,
+      batch: form.batch?.trim() || null,
       fees: form.fees !== "" && form.fees !== null ? parseFloat(form.fees) : null,
       school_college_name: form.school_college_name?.trim() || null,
       medium: form.medium || null,
@@ -234,6 +253,7 @@ export default function Students() {
       permanent_address: student.permanent_address || "",
       local_address: student.local_address || "",
       course: student.course || "",
+      batch: student.batch || "",
       fees: student.fees || "",
       school_college_name: student.school_college_name || "",
       medium: student.medium || "",
@@ -376,6 +396,21 @@ export default function Students() {
     finally { setBulkSubmitting(false) }
   }
 
+  async function handleBulkBatch() {
+    if (!bulkBatch.trim()) { setError("Enter a batch name to assign"); return }
+    if (selectedIds.size === 0) return
+    setBulkBatchSubmitting(true)
+    try {
+      await bulkUpdateBatchAPI({ student_ids: [...selectedIds], batch: bulkBatch.trim() })
+      setSuccess(`${selectedIds.size} student(s) assigned to batch "${bulkBatch.trim()}"`)
+      setSelectedIds(new Set())
+      setBulkBatch("")
+      fetchStudents()
+      fetchBatches()
+    } catch { setError("Bulk batch update failed") }
+    finally { setBulkBatchSubmitting(false) }
+  }
+
   function exportToExcel() {
     const today = new Date().toISOString().split("T")[0]
     const rows = filtered.map(s => ({
@@ -494,6 +529,20 @@ export default function Students() {
                   <p className="text-xs text-orange-500 mt-1">No courses added yet. <a href="/courses" className="underline">Add courses first.</a></p>
                 )}
               </div>
+              <div>
+                <label className="form-label">Batch</label>
+                <input
+                  list="batch-options"
+                  name="batch"
+                  value={form.batch}
+                  onChange={handleChange}
+                  placeholder="e.g. Morning Batch A"
+                  className="inp"
+                />
+                <datalist id="batch-options">
+                  {batches.map(b => <option key={b} value={b} />)}
+                </datalist>
+              </div>
               <Field label="Fees (₹)" name="fees" value={form.fees} onChange={handleChange} type="number" min="0" placeholder="Total fees amount" />
               <Field label="Admission Date" name="admission_date" value={form.admission_date} onChange={handleChange} type="date" />
               <div>
@@ -598,7 +647,11 @@ export default function Students() {
               <option value="all">All Courses</option>
               {uniqueCourses.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={() => { setSearch(""); setCourseFilter("all") }} className="btn-ghost">Clear</button>
+            <select value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)} className="inp w-auto">
+              <option value="all">All Batches</option>
+              {batches.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <button onClick={() => { setSearch(""); setCourseFilter("all"); setBatchFilter("all") }} className="btn-ghost">Clear</button>
             <span className="text-sm text-slate-400">{filtered.length} of {students.length} students</span>
             {courseFilter !== "all" && (
               <button
@@ -646,6 +699,7 @@ export default function Students() {
                     <th>Name</th>
                     <th>Father Name</th>
                     <th>Course</th>
+                    <th>Batch</th>
                     <th>Medium</th>
                     <th>Mobile</th>
                     <th>Fees</th>
@@ -685,6 +739,11 @@ export default function Students() {
                             <span key={ac.id} className="badge badge-purple" title="Additional Course">+{ac.name}</span>
                           ))}
                         </div>
+                      </td>
+                      <td>
+                        {s.batch
+                          ? <span className="badge bg-violet-100 text-violet-700">{s.batch}</span>
+                          : <span className="text-slate-400">—</span>}
                       </td>
                       <td>
                         {s.medium
@@ -755,18 +814,34 @@ export default function Students() {
 
         {/* ── BULK PROMOTE BAR ── */}
         {selectedIds.size > 0 && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white rounded-2xl shadow-2xl px-6 py-4 flex items-center gap-4 z-40">
-            <span className="text-sm font-medium">{selectedIds.size} student{selectedIds.size > 1 ? "s" : ""} selected</span>
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white rounded-2xl shadow-2xl px-6 py-4 flex flex-wrap items-center gap-3 z-40 max-w-4xl">
+            <span className="text-sm font-medium whitespace-nowrap">{selectedIds.size} student{selectedIds.size > 1 ? "s" : ""} selected</span>
+            <span className="text-slate-600 hidden sm:block">|</span>
             <select value={bulkCourse} onChange={e => setBulkCourse(e.target.value)}
               className="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none">
-              <option value="">Select new course…</option>
+              <option value="">Course…</option>
               {uniqueCourses.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <button onClick={handleBulkPromote} disabled={bulkSubmitting || !bulkCourse}
-              className="btn-primary disabled:opacity-50">
+              className="btn-primary disabled:opacity-50 text-sm py-1.5">
               {bulkSubmitting ? "Updating…" : "Move to Course"}
             </button>
-            <button onClick={() => setSelectedIds(new Set())} className="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
+            <span className="text-slate-600 hidden sm:block">|</span>
+            <input
+              list="bulk-batch-options"
+              value={bulkBatch}
+              onChange={e => setBulkBatch(e.target.value)}
+              placeholder="Batch name…"
+              className="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none placeholder-slate-400 w-36"
+            />
+            <datalist id="bulk-batch-options">
+              {batches.map(b => <option key={b} value={b} />)}
+            </datalist>
+            <button onClick={handleBulkBatch} disabled={bulkBatchSubmitting || !bulkBatch.trim()}
+              className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50">
+              {bulkBatchSubmitting ? "Updating…" : "Assign Batch"}
+            </button>
+            <button onClick={() => setSelectedIds(new Set())} className="text-slate-400 hover:text-white text-lg leading-none ml-1">&times;</button>
           </div>
         )}
 
@@ -808,6 +883,7 @@ export default function Students() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <DetailRow label="Date of Birth" value={viewStudent.dob} />
                 <DetailRow label="Admission Date" value={viewStudent.admission_date} />
+                {viewStudent.batch && <DetailRow label="Batch" value={viewStudent.batch} />}
                 <DetailRow label="Student Mobile" value={viewStudent.phone} />
                 <DetailRow label="Parent Mobile" value={viewStudent.parent_phone} />
                 <DetailRow label="Medium" value={viewStudent.medium ? viewStudent.medium.charAt(0).toUpperCase() + viewStudent.medium.slice(1) : "—"} />

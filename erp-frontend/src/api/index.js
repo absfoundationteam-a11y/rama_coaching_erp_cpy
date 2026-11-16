@@ -106,7 +106,12 @@ export const deleteCourseAPI = (id) => API.delete(`/delete_course/${id}`);
 
 // ─── Bulk Operations ─────────────────────────────────────────
 export const bulkUpdateCourseAPI = (data) => API.put("/students/bulk-update-course", data);
+export const bulkUpdateBatchAPI  = (data) => API.put("/students/bulk-update-batch", data);
 export const addBulkFeesAPI = (data) => API.post("/fees/bulk", data);
+
+// ─── Batches ─────────────────────────────────────────────────
+export const getBatchesAPI         = ()      => API.get("/batches");
+export const getStudentsByBatchAPI = (batch) => API.get(`/students/batch/${encodeURIComponent(batch)}`);
 
 // ─── Subjects ────────────────────────────────────────────────
 export const getSubjectsAPI = () => API.get("/subjects");
