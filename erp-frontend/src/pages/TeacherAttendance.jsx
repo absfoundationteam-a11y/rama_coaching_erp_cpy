@@ -2,8 +2,8 @@ import { useEffect, useState } from "react"
 import Sidebar from "../components/Sidebar"
 import { Alert, LoadingState, TabBar } from "../components/UI"
 import {
-  getCoursesAPI,
-  getStudentsByCourseAPI,
+  getBatchesAPI,
+  getStudentsByBatchAPI,
   markAttendanceBulkAPI,
   checkAttendanceBulkAPI,
   getStudentAttendanceAPI,
@@ -37,8 +37,8 @@ export default function TeacherAttendance() {
 // ─────────────────────────────────────────────────────────────────────────────
 function MarkAttendance() {
   const [date, setDate]                   = useState(new Date().toISOString().split("T")[0])
-  const [courses, setCourses]             = useState([])
-  const [selectedCourse, setSelectedCourse] = useState(null)
+  const [batches, setBatches]             = useState([])
+  const [selectedBatch, setSelectedBatch] = useState("")
   const [students, setStudents]           = useState([])
   const [attendance, setAttendance]       = useState({})
   const [originalStatus, setOriginalStatus] = useState({})
@@ -48,34 +48,29 @@ function MarkAttendance() {
   const [success, setSuccess]             = useState("")
 
   useEffect(() => {
-    getCoursesAPI().then((r) => setCourses(r.data.courses)).catch(() => {})
+    getBatchesAPI().then((r) => setBatches(r.data.batches || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (success) { const t = setTimeout(() => setSuccess(""), 5000); return () => clearTimeout(t) }
   }, [success])
 
-  function handleCourseChange(e) {
-    const courseId = e.target.value
-    if (!courseId) {
-      setSelectedCourse(null); setStudents([]); setAttendance({}); setOriginalStatus({})
-      return
-    }
-    setSelectedCourse(courses.find((c) => c.id === parseInt(courseId)) || null)
+  function handleBatchChange(e) {
+    setSelectedBatch(e.target.value)
     setStudents([]); setAttendance({}); setOriginalStatus({})
   }
 
   async function loadStudents(e) {
     e.preventDefault()
     setError(""); setSuccess("")
-    if (!selectedCourse) { setError("Please select a course"); return }
-    if (!date)           { setError("Please select a date");   return }
+    if (!selectedBatch) { setError("Please select a batch"); return }
+    if (!date)          { setError("Please select a date");  return }
 
     setLoadingStudents(true)
     try {
-      const studRes = await getStudentsByCourseAPI(selectedCourse.name)
+      const studRes = await getStudentsByBatchAPI(selectedBatch)
       const list    = studRes.data.students
-      if (list.length === 0) { setError(`No students found in course "${selectedCourse.name}"`); return }
+      if (list.length === 0) { setError(`No students found in batch "${selectedBatch}"`); return }
 
       const ids      = list.map((s) => s.id)
       const checkRes = await checkAttendanceBulkAPI({ date, student_ids: ids })
@@ -132,7 +127,9 @@ function MarkAttendance() {
       changed.forEach((s) => { newOrig[s.id] = attendance[s.id] })
       setOriginalStatus(newOrig)
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to save attendance")
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail) ? detail.map(d => d.msg).join(", ") : (typeof detail === "string" ? detail : "Failed to save attendance")
+      setError(msg)
     } finally {
       setSubmitting(false)
     }
@@ -160,17 +157,17 @@ function MarkAttendance() {
 
       {/* ── Selection form ── */}
       <div className="card p-6">
-        <h3 className="section-title mb-4">Select Date &amp; Course</h3>
+        <h3 className="section-title mb-4">Select Date &amp; Batch</h3>
         <form onSubmit={loadStudents} className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="form-label">Date *</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="inp" />
           </div>
           <div>
-            <label className="form-label">Course *</label>
-            <select onChange={handleCourseChange} value={selectedCourse?.id || ""} className="inp">
-              <option value="">Select course</option>
-              {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <label className="form-label">Batch *</label>
+            <select onChange={handleBatchChange} value={selectedBatch} className="inp">
+              <option value="">Select batch</option>
+              {batches.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div className="flex items-end">
@@ -192,7 +189,7 @@ function MarkAttendance() {
           <div className="p-5 border-b border-slate-100 flex flex-wrap justify-between items-start gap-3">
             <div>
               <h3 className="section-title">
-                {students.length} Students — {selectedCourse?.name} — {date}
+                {students.length} Students — {selectedBatch} — {date}
               </h3>
               <p className="text-sm text-slate-400 mt-1 flex flex-wrap gap-3">
                 <span className="text-green-600 font-medium">✓ {presentCount} present</span>
@@ -323,7 +320,7 @@ function MarkAttendance() {
                       </td>
                       <td>
                         <span className={`badge ${s.is_additional ? "badge-purple" : "badge-blue"}`}>
-                          {s.is_additional ? `${selectedCourse?.name} (+)` : (s.course || selectedCourse?.name)}
+                          {s.is_additional ? `${selectedBatch} (+)` : (s.batch || selectedBatch)}
                         </span>
                       </td>
                       <td>
@@ -393,10 +390,10 @@ function MarkAttendance() {
 // VIEW ATTENDANCE
 // ─────────────────────────────────────────────────────────────────────────────
 function ViewAttendance() {
-  const [courses, setCourses]             = useState([])
-  const [selectedCourse, setSelectedCourse] = useState("")
-  const [courseStudents, setCourseStudents] = useState([])
-  const [courseLoading, setCourseLoading] = useState(false)
+  const [batches, setBatches]             = useState([])
+  const [selectedBatch, setSelectedBatch] = useState("")
+  const [batchStudents, setBatchStudents] = useState([])
+  const [batchLoading, setBatchLoading]   = useState(false)
   const [nameFilter, setNameFilter]       = useState("")
 
   const [student, setStudent]   = useState(null)
@@ -405,17 +402,17 @@ function ViewAttendance() {
   const [error, setError]       = useState("")
 
   useEffect(() => {
-    getCoursesAPI().then((r) => setCourses(r.data.courses || [])).catch(() => {})
+    getBatchesAPI().then((r) => setBatches(r.data.batches || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
-    if (!selectedCourse) { setCourseStudents([]); setNameFilter(""); return }
-    setCourseLoading(true)
-    getStudentsByCourseAPI(selectedCourse)
-      .then((r) => setCourseStudents(r.data.students || []))
-      .catch(() => setCourseStudents([]))
-      .finally(() => setCourseLoading(false))
-  }, [selectedCourse])
+    if (!selectedBatch) { setBatchStudents([]); setNameFilter(""); return }
+    setBatchLoading(true)
+    getStudentsByBatchAPI(selectedBatch)
+      .then((r) => setBatchStudents(r.data.students || []))
+      .catch(() => setBatchStudents([]))
+      .finally(() => setBatchLoading(false))
+  }, [selectedBatch])
 
   async function loadStudentAttendance(s) {
     setStudent(s); setRecords([]); setError(""); setLoading(true)
@@ -433,8 +430,8 @@ function ViewAttendance() {
   }
 
   const filtered = nameFilter.trim()
-    ? courseStudents.filter((s) => s.name.toLowerCase().includes(nameFilter.toLowerCase()))
-    : courseStudents
+    ? batchStudents.filter((s) => s.name.toLowerCase().includes(nameFilter.toLowerCase()))
+    : batchStudents
 
   const present = records.filter((r) => r.status === "present").length
   const absent  = records.filter((r) => r.status === "absent").length
@@ -450,27 +447,27 @@ function ViewAttendance() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="form-label">Course</label>
-            <select value={selectedCourse}
-              onChange={(e) => { setSelectedCourse(e.target.value); clearStudent() }}
+            <label className="form-label">Batch</label>
+            <select value={selectedBatch}
+              onChange={(e) => { setSelectedBatch(e.target.value); clearStudent() }}
               className="inp">
-              <option value="">— Select a course —</option>
-              {courses.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+              <option value="">— Select a batch —</option>
+              {batches.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div>
             <label className="form-label">Search by Name</label>
             <input type="text" placeholder="Type student name…"
               value={nameFilter} onChange={(e) => setNameFilter(e.target.value)}
-              disabled={!selectedCourse}
+              disabled={!selectedBatch}
               className="inp" />
           </div>
         </div>
 
-        {courseLoading && <LoadingState message="Loading students…" />}
+        {batchLoading && <LoadingState message="Loading students…" />}
 
-        {!courseLoading && selectedCourse && courseStudents.length === 0 && (
-          <p className="text-sm text-slate-400">No students found in this course.</p>
+        {!batchLoading && selectedBatch && batchStudents.length === 0 && (
+          <p className="text-sm text-slate-400">No students found in this batch.</p>
         )}
 
         {filtered.length > 0 && (
@@ -509,7 +506,7 @@ function ViewAttendance() {
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-lg flex-shrink-0">🎓</div>
             <div className="flex-1">
               <p className="font-bold text-slate-800">{student.name}</p>
-              <p className="text-xs text-slate-400 font-mono">{student.student_code || `#${student.id}`} · {selectedCourse}</p>
+              <p className="text-xs text-slate-400 font-mono">{student.student_code || `#${student.id}`} · {selectedBatch}</p>
             </div>
             <button onClick={clearStudent} className="text-slate-400 hover:text-red-500 text-xl font-bold leading-none transition">×</button>
           </div>
