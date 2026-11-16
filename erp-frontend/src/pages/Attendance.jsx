@@ -290,7 +290,7 @@ export default function Attendance() {
     setBulkError(""); setBulkSuccess(""); setBulkSubmitting(true)
     try {
       const records = unmarked.map(s => ({ student_id: s.id, date: bulkDate, status: bulkAttendance[s.id] || "present" }))
-      await markAttendanceBulkAPI({ records })
+      await markAttendanceBulkAPI(records)
       setBulkSuccess(`Attendance marked for ${records.length} student${records.length > 1 ? "s" : ""}!`)
       const checkRes = await checkAttendanceBulkAPI({ date: bulkDate, student_ids: bulkStudents.map(s => s.id) })
       const existing = {}
@@ -298,7 +298,9 @@ export default function Attendance() {
       if (Array.isArray(checkData)) { checkData.forEach(r => { existing[r.student_id] = r.status }) }
       setBulkOriginal(existing)
     } catch (err) {
-      setBulkError(err.response?.data?.detail || "Failed to mark attendance")
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail) ? detail.map(d => d.msg).join(", ") : (typeof detail === "string" ? detail : "Failed to mark attendance")
+      setBulkError(msg)
     } finally {
       setBulkSubmitting(false)
     }
