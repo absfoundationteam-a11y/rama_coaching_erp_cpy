@@ -250,15 +250,19 @@ export default function Attendance() {
     setBulkError(""); setBulkSuccess("")
     setBulkLoading(true); setBulkStudents([]); setBulkAttendance({}); setBulkOriginal({})
     try {
-      const [studRes, checkRes] = await Promise.all([
-        getStudentsByCourseAPI(bulkCourse),
-        checkAttendanceBulkAPI({ course: bulkCourse, date: bulkDate })
-      ])
+      const studRes = await getStudentsByCourseAPI(bulkCourse)
       const students = studRes.data.students || []
       setBulkStudents(students)
+
       const existing = {}
-      const checkData = checkRes.data?.records || checkRes.data || []
-      if (Array.isArray(checkData)) { checkData.forEach(r => { existing[r.student_id] = r.status }) }
+      if (students.length > 0) {
+        const checkRes = await checkAttendanceBulkAPI({
+          date: bulkDate,
+          student_ids: students.map(s => s.id)
+        })
+        const checkData = checkRes.data?.records || checkRes.data || []
+        if (Array.isArray(checkData)) { checkData.forEach(r => { existing[r.student_id] = r.status }) }
+      }
       setBulkOriginal(existing)
       const att = {}
       students.forEach(s => { att[s.id] = existing[s.id] || "present" })
