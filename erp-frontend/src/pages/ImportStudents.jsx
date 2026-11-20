@@ -7,7 +7,7 @@ import { importStudentsAPI } from "../api"
 const REQUIRED_COLS = ["name", "phone"]
 const OPTIONAL_COLS_BASE = [
   "father_name", "dob", "email", "parent_phone",
-  "permanent_address", "local_address", "course", "fees", "fees_paid",
+  "permanent_address", "local_address", "course", "batch", "fees", "fees_paid",
   "school_college_name", "medium", "admission_date", "photo"
 ]
 const OPTIONAL_COLS_BATCH = [
