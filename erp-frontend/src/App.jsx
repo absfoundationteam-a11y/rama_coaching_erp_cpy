@@ -29,6 +29,7 @@ import Inquiry from "./pages/Inquiry"
 import Tasks from "./pages/Tasks"
 import MyTasks from "./pages/MyTasks"
 import Expenses from "./pages/Expenses"
+import CombinedReports from "./pages/CombinedReports"
 
 // ─── Loading Spinner ─────────────────────────────────────────
 function LoadingScreen() {
@@ -154,6 +155,7 @@ export default function App() {
         <Route path="/inquiries"            element={<AdminRoute><Inquiry /></AdminRoute>} />
         <Route path="/tasks"                element={<AdminRoute><Tasks /></AdminRoute>} />
         <Route path="/expenses"             element={<AdminRoute><Expenses /></AdminRoute>} />
+        <Route path="/combined-reports"     element={<AdminRoute><CombinedReports /></AdminRoute>} />
 
         {/* Teacher routes */}
         <Route path="/teacher" element={<TeacherRoute><TeacherDashboard /></TeacherRoute>} />

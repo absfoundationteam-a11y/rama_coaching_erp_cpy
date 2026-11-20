@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react"
 import Sidebar from "../components/Sidebar"
 import ReportCardModal from "../components/ReportCardModal"
 import { LoadingState, Alert, EmptyState } from "../components/UI"
+import { useBranch } from "../context/BranchContext"
 import * as XLSX from "xlsx"
 import {
   getStudentsAPI,
@@ -43,6 +44,9 @@ const EMPTY_FORM = {
 }
 
 export default function Students() {
+  const { activeBranch } = useBranch() || {}
+  const enableBatch = activeBranch?.enableBatch ?? true
+
   const [courses, setCourses] = useState([])
   const [batches, setBatches] = useState([])
   const [students, setStudents] = useState([])
@@ -81,7 +85,7 @@ export default function Students() {
   const [reportResult, setReportResult]     = useState(null) // { success, message }
   const [bulkResult, setBulkResult]         = useState(null) // { sent, failed, total }
 
-  useEffect(() => { fetchStudents(); fetchCourses(); fetchBatches() }, [])
+  useEffect(() => { fetchStudents(); fetchCourses(); if (enableBatch) fetchBatches() }, [enableBatch])
 
   useEffect(() => {
     if (success) {
@@ -113,7 +117,7 @@ export default function Students() {
         s.school_college_name?.toLowerCase().includes(q) ||
         s.student_code?.toLowerCase().includes(q)
       const matchCourse = courseFilter === "all" || s.course === courseFilter
-      const matchBatch  = batchFilter  === "all" || s.batch  === batchFilter
+      const matchBatch  = !enableBatch || batchFilter === "all" || s.batch === batchFilter
       return matchText && matchCourse && matchBatch
     })
   }, [search, students, courseFilter, batchFilter])
@@ -529,20 +533,22 @@ export default function Students() {
                   <p className="text-xs text-orange-500 mt-1">No courses added yet. <a href="/courses" className="underline">Add courses first.</a></p>
                 )}
               </div>
-              <div>
-                <label className="form-label">Batch</label>
-                <input
-                  list="batch-options"
-                  name="batch"
-                  value={form.batch}
-                  onChange={handleChange}
-                  placeholder="e.g. Morning Batch A"
-                  className="inp"
-                />
-                <datalist id="batch-options">
-                  {batches.map(b => <option key={b} value={b} />)}
-                </datalist>
-              </div>
+              {enableBatch && (
+                <div>
+                  <label className="form-label">Batch</label>
+                  <input
+                    list="batch-options"
+                    name="batch"
+                    value={form.batch}
+                    onChange={handleChange}
+                    placeholder="e.g. Morning Batch A"
+                    className="inp"
+                  />
+                  <datalist id="batch-options">
+                    {batches.map(b => <option key={b} value={b} />)}
+                  </datalist>
+                </div>
+              )}
               <Field label="Fees (₹)" name="fees" value={form.fees} onChange={handleChange} type="number" min="0" placeholder="Total fees amount" />
               <Field label="Admission Date" name="admission_date" value={form.admission_date} onChange={handleChange} type="date" />
               <div>
@@ -647,10 +653,12 @@ export default function Students() {
               <option value="all">All Courses</option>
               {uniqueCourses.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <select value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)} className="inp w-auto">
-              <option value="all">All Batches</option>
-              {batches.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
+            {enableBatch && (
+              <select value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)} className="inp w-auto">
+                <option value="all">All Batches</option>
+                {batches.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            )}
             <button onClick={() => { setSearch(""); setCourseFilter("all"); setBatchFilter("all") }} className="btn-ghost">Clear</button>
             <span className="text-sm text-slate-400">{filtered.length} of {students.length} students</span>
             {courseFilter !== "all" && (
@@ -699,7 +707,7 @@ export default function Students() {
                     <th>Name</th>
                     <th>Father Name</th>
                     <th>Course</th>
-                    <th>Batch</th>
+                    {enableBatch && <th>Batch</th>}
                     <th>Medium</th>
                     <th>Mobile</th>
                     <th>Fees</th>
@@ -740,11 +748,11 @@ export default function Students() {
                           ))}
                         </div>
                       </td>
-                      <td>
+                      {enableBatch && <td>
                         {s.batch
                           ? <span className="badge bg-violet-100 text-violet-700">{s.batch}</span>
                           : <span className="text-slate-400">—</span>}
-                      </td>
+                      </td>}
                       <td>
                         {s.medium
                           ? <span className={`badge ${s.medium === "hindi" ? "bg-orange-100 text-orange-700" : "badge-green"}`}>
@@ -826,21 +834,25 @@ export default function Students() {
               className="btn-primary disabled:opacity-50 text-sm py-1.5">
               {bulkSubmitting ? "Updating…" : "Move to Course"}
             </button>
-            <span className="text-slate-600 hidden sm:block">|</span>
-            <input
-              list="bulk-batch-options"
-              value={bulkBatch}
-              onChange={e => setBulkBatch(e.target.value)}
-              placeholder="Batch name…"
-              className="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none placeholder-slate-400 w-36"
-            />
-            <datalist id="bulk-batch-options">
-              {batches.map(b => <option key={b} value={b} />)}
-            </datalist>
-            <button onClick={handleBulkBatch} disabled={bulkBatchSubmitting || !bulkBatch.trim()}
-              className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50">
-              {bulkBatchSubmitting ? "Updating…" : "Assign Batch"}
-            </button>
+            {enableBatch && (
+              <>
+                <span className="text-slate-600 hidden sm:block">|</span>
+                <input
+                  list="bulk-batch-options"
+                  value={bulkBatch}
+                  onChange={e => setBulkBatch(e.target.value)}
+                  placeholder="Batch name…"
+                  className="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none placeholder-slate-400 w-36"
+                />
+                <datalist id="bulk-batch-options">
+                  {batches.map(b => <option key={b} value={b} />)}
+                </datalist>
+                <button onClick={handleBulkBatch} disabled={bulkBatchSubmitting || !bulkBatch.trim()}
+                  className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50">
+                  {bulkBatchSubmitting ? "Updating…" : "Assign Batch"}
+                </button>
+              </>
+            )}
             <button onClick={() => setSelectedIds(new Set())} className="text-slate-400 hover:text-white text-lg leading-none ml-1">&times;</button>
           </div>
         )}
@@ -883,7 +895,7 @@ export default function Students() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <DetailRow label="Date of Birth" value={viewStudent.dob} />
                 <DetailRow label="Admission Date" value={viewStudent.admission_date} />
-                {viewStudent.batch && <DetailRow label="Batch" value={viewStudent.batch} />}
+                {enableBatch && viewStudent.batch && <DetailRow label="Batch" value={viewStudent.batch} />}
                 <DetailRow label="Student Mobile" value={viewStudent.phone} />
                 <DetailRow label="Parent Mobile" value={viewStudent.parent_phone} />
                 <DetailRow label="Medium" value={viewStudent.medium ? viewStudent.medium.charAt(0).toUpperCase() + viewStudent.medium.slice(1) : "—"} />
