@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
+import { useBranch } from "../context/BranchContext"
 import { getNoticesAPI } from "../api"
 
 export default function Sidebar() {
   const { user, logout, isAdmin, isTeacher, isStaff } = useAuth()
+  const { activeBranchId, activeBranch, switchBranch, branch2Configured } = useBranch() || {}
   const location  = useLocation()
   const navigate  = useNavigate()
   const [collapsed, setCollapsed]           = useState(false)
@@ -85,7 +87,8 @@ export default function Sidebar() {
     { to: "/tasks",           label: "✅ Tasks" },
     { to: "/expenses",        label: "💸 Expenses" },
     { to: "/audit-log",       label: "🔍 Audit Log" },
-    { to: "/data-export",     label: "📤 Data Export" },
+    { to: "/data-export",       label: "📤 Data Export" },
+    { to: "/combined-reports",  label: "🏢 Combined Reports" },
   ]
 
   const studentLinks = [
@@ -271,6 +274,33 @@ export default function Sidebar() {
             ✕
           </button>
         </div>
+
+        {/* Branch Switcher — admin only */}
+        {isAdmin && branch2Configured && (
+          <div className={`border-b border-slate-700 px-3 py-2 ${collapsed ? "hidden md:block" : ""}`}>
+            <p className={`text-[10px] text-slate-500 mb-1.5 uppercase tracking-wide ${collapsed ? "md:hidden" : ""}`}>Branch</p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => switchBranch?.("branch1")}
+                className={`flex-1 py-1 rounded text-xs font-semibold transition ${
+                  activeBranchId === "branch1" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700"
+                } ${collapsed ? "md:px-1" : ""}`}
+                title="Rama Coaching"
+              >
+                {collapsed ? "R" : "Rama"}
+              </button>
+              <button
+                onClick={() => switchBranch?.("branch2")}
+                className={`flex-1 py-1 rounded text-xs font-semibold transition ${
+                  activeBranchId === "branch2" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700"
+                } ${collapsed ? "md:px-1" : ""}`}
+                title="CKC Branch"
+              >
+                {collapsed ? "C" : "CKC"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Nav Links */}
         <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">

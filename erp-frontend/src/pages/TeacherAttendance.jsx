@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react"
 import Sidebar from "../components/Sidebar"
 import { Alert, LoadingState, TabBar } from "../components/UI"
+import { useBranch } from "../context/BranchContext"
 import {
   getBatchesAPI,
   getStudentsByBatchAPI,
+  getCoursesAPI,
+  getStudentsByCourseAPI,
   markAttendanceBulkAPI,
   checkAttendanceBulkAPI,
   getStudentAttendanceAPI,
@@ -36,9 +39,14 @@ export default function TeacherAttendance() {
 // MARK ATTENDANCE
 // ─────────────────────────────────────────────────────────────────────────────
 function MarkAttendance() {
+  const { activeBranch } = useBranch() || {}
+  const enableBatch = activeBranch?.enableBatch ?? true
+
   const [date, setDate]                   = useState(new Date().toISOString().split("T")[0])
   const [batches, setBatches]             = useState([])
+  const [courses, setCourses]             = useState([])
   const [selectedBatch, setSelectedBatch] = useState("")
+  const [selectedCourse, setSelectedCourse] = useState("")
   const [students, setStudents]           = useState([])
   const [attendance, setAttendance]       = useState({})
   const [originalStatus, setOriginalStatus] = useState({})
@@ -48,29 +56,38 @@ function MarkAttendance() {
   const [success, setSuccess]             = useState("")
 
   useEffect(() => {
-    getBatchesAPI().then((r) => setBatches(r.data.batches || [])).catch(() => {})
-  }, [])
+    if (enableBatch) {
+      getBatchesAPI().then((r) => setBatches(r.data.batches || [])).catch(() => {})
+    } else {
+      getCoursesAPI().then((r) => setCourses(r.data.courses || [])).catch(() => {})
+    }
+  }, [enableBatch])
 
   useEffect(() => {
     if (success) { const t = setTimeout(() => setSuccess(""), 5000); return () => clearTimeout(t) }
   }, [success])
 
-  function handleBatchChange(e) {
-    setSelectedBatch(e.target.value)
+  function handleSelectionChange(e) {
+    if (enableBatch) setSelectedBatch(e.target.value)
+    else setSelectedCourse(e.target.value)
     setStudents([]); setAttendance({}); setOriginalStatus({})
   }
+
+  const activeSelection = enableBatch ? selectedBatch : selectedCourse
 
   async function loadStudents(e) {
     e.preventDefault()
     setError(""); setSuccess("")
-    if (!selectedBatch) { setError("Please select a batch"); return }
-    if (!date)          { setError("Please select a date");  return }
+    if (!activeSelection) { setError(`Please select a ${enableBatch ? "batch" : "course"}`); return }
+    if (!date)            { setError("Please select a date"); return }
 
     setLoadingStudents(true)
     try {
-      const studRes = await getStudentsByBatchAPI(selectedBatch)
+      const studRes = enableBatch
+        ? await getStudentsByBatchAPI(selectedBatch)
+        : await getStudentsByCourseAPI(selectedCourse)
       const list    = studRes.data.students
-      if (list.length === 0) { setError(`No students found in batch "${selectedBatch}"`); return }
+      if (list.length === 0) { setError(`No students found in ${enableBatch ? "batch" : "course"} "${activeSelection}"`); return }
 
       const ids      = list.map((s) => s.id)
       const checkRes = await checkAttendanceBulkAPI({ date, student_ids: ids })
@@ -157,17 +174,20 @@ function MarkAttendance() {
 
       {/* ── Selection form ── */}
       <div className="card p-6">
-        <h3 className="section-title mb-4">Select Date &amp; Batch</h3>
+        <h3 className="section-title mb-4">Select Date &amp; {enableBatch ? "Batch" : "Course"}</h3>
         <form onSubmit={loadStudents} className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="form-label">Date *</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="inp" />
           </div>
           <div>
-            <label className="form-label">Batch *</label>
-            <select onChange={handleBatchChange} value={selectedBatch} className="inp">
-              <option value="">Select batch</option>
-              {batches.map((b) => <option key={b} value={b}>{b}</option>)}
+            <label className="form-label">{enableBatch ? "Batch" : "Course"} *</label>
+            <select onChange={handleSelectionChange} value={activeSelection} className="inp">
+              <option value="">Select {enableBatch ? "batch" : "course"}</option>
+              {enableBatch
+                ? batches.map((b) => <option key={b} value={b}>{b}</option>)
+                : courses.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)
+              }
             </select>
           </div>
           <div className="flex items-end">
@@ -189,7 +209,7 @@ function MarkAttendance() {
           <div className="p-5 border-b border-slate-100 flex flex-wrap justify-between items-start gap-3">
             <div>
               <h3 className="section-title">
-                {students.length} Students — {selectedBatch} — {date}
+                {students.length} Students — {activeSelection} — {date}
               </h3>
               <p className="text-sm text-slate-400 mt-1 flex flex-wrap gap-3">
                 <span className="text-green-600 font-medium">✓ {presentCount} present</span>
@@ -320,7 +340,7 @@ function MarkAttendance() {
                       </td>
                       <td>
                         <span className={`badge ${s.is_additional ? "badge-purple" : "badge-blue"}`}>
-                          {s.is_additional ? `${selectedBatch} (+)` : (s.batch || selectedBatch)}
+                          {s.is_additional ? `${activeSelection} (+)` : (enableBatch ? (s.batch || activeSelection) : (s.course || activeSelection))}
                         </span>
                       </td>
                       <td>
@@ -390,10 +410,15 @@ function MarkAttendance() {
 // VIEW ATTENDANCE
 // ─────────────────────────────────────────────────────────────────────────────
 function ViewAttendance() {
+  const { activeBranch } = useBranch() || {}
+  const enableBatch = activeBranch?.enableBatch ?? true
+
   const [batches, setBatches]             = useState([])
+  const [courses, setCourses]             = useState([])
   const [selectedBatch, setSelectedBatch] = useState("")
-  const [batchStudents, setBatchStudents] = useState([])
-  const [batchLoading, setBatchLoading]   = useState(false)
+  const [selectedCourse, setSelectedCourse] = useState("")
+  const [listStudents, setListStudents]   = useState([])
+  const [listLoading, setListLoading]     = useState(false)
   const [nameFilter, setNameFilter]       = useState("")
 
   const [student, setStudent]   = useState(null)
@@ -401,18 +426,27 @@ function ViewAttendance() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState("")
 
-  useEffect(() => {
-    getBatchesAPI().then((r) => setBatches(r.data.batches || [])).catch(() => {})
-  }, [])
+  const activeSelection = enableBatch ? selectedBatch : selectedCourse
 
   useEffect(() => {
-    if (!selectedBatch) { setBatchStudents([]); setNameFilter(""); return }
-    setBatchLoading(true)
-    getStudentsByBatchAPI(selectedBatch)
-      .then((r) => setBatchStudents(r.data.students || []))
-      .catch(() => setBatchStudents([]))
-      .finally(() => setBatchLoading(false))
-  }, [selectedBatch])
+    if (enableBatch) {
+      getBatchesAPI().then((r) => setBatches(r.data.batches || [])).catch(() => {})
+    } else {
+      getCoursesAPI().then((r) => setCourses(r.data.courses || [])).catch(() => {})
+    }
+  }, [enableBatch])
+
+  useEffect(() => {
+    if (!activeSelection) { setListStudents([]); setNameFilter(""); return }
+    setListLoading(true)
+    const fetch = enableBatch
+      ? getStudentsByBatchAPI(selectedBatch)
+      : getStudentsByCourseAPI(selectedCourse)
+    fetch
+      .then((r) => setListStudents(r.data.students || []))
+      .catch(() => setListStudents([]))
+      .finally(() => setListLoading(false))
+  }, [selectedBatch, selectedCourse])
 
   async function loadStudentAttendance(s) {
     setStudent(s); setRecords([]); setError(""); setLoading(true)
@@ -430,8 +464,8 @@ function ViewAttendance() {
   }
 
   const filtered = nameFilter.trim()
-    ? batchStudents.filter((s) => s.name.toLowerCase().includes(nameFilter.toLowerCase()))
-    : batchStudents
+    ? listStudents.filter((s) => s.name.toLowerCase().includes(nameFilter.toLowerCase()))
+    : listStudents
 
   const present = records.filter((r) => r.status === "present").length
   const absent  = records.filter((r) => r.status === "absent").length
@@ -447,33 +481,36 @@ function ViewAttendance() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="form-label">Batch</label>
-            <select value={selectedBatch}
-              onChange={(e) => { setSelectedBatch(e.target.value); clearStudent() }}
+            <label className="form-label">{enableBatch ? "Batch" : "Course"}</label>
+            <select value={activeSelection}
+              onChange={(e) => { if (enableBatch) { setSelectedBatch(e.target.value) } else { setSelectedCourse(e.target.value) }; clearStudent() }}
               className="inp">
-              <option value="">— Select a batch —</option>
-              {batches.map((b) => <option key={b} value={b}>{b}</option>)}
+              <option value="">— Select a {enableBatch ? "batch" : "course"} —</option>
+              {enableBatch
+                ? batches.map((b) => <option key={b} value={b}>{b}</option>)
+                : courses.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)
+              }
             </select>
           </div>
           <div>
             <label className="form-label">Search by Name</label>
             <input type="text" placeholder="Type student name…"
               value={nameFilter} onChange={(e) => setNameFilter(e.target.value)}
-              disabled={!selectedBatch}
+              disabled={!activeSelection}
               className="inp" />
           </div>
         </div>
 
-        {batchLoading && <LoadingState message="Loading students…" />}
+        {listLoading && <LoadingState message="Loading students…" />}
 
-        {!batchLoading && selectedBatch && batchStudents.length === 0 && (
-          <p className="text-sm text-slate-400">No students found in this batch.</p>
+        {!listLoading && activeSelection && listStudents.length === 0 && (
+          <p className="text-sm text-slate-400">No students found in this {enableBatch ? "batch" : "course"}.</p>
         )}
 
         {filtered.length > 0 && (
           <div>
             <p className="text-xs text-slate-400 mb-2">
-              {filtered.length} student{filtered.length !== 1 ? "s" : ""} — click to view attendance
+              {filtered.length} student{filtered.length !== 1 ? "s" : ""} in {activeSelection} — click to view attendance
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
               {filtered.map((s) => (
@@ -506,7 +543,7 @@ function ViewAttendance() {
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-lg flex-shrink-0">🎓</div>
             <div className="flex-1">
               <p className="font-bold text-slate-800">{student.name}</p>
-              <p className="text-xs text-slate-400 font-mono">{student.student_code || `#${student.id}`} · {selectedBatch}</p>
+              <p className="text-xs text-slate-400 font-mono">{student.student_code || `#${student.id}`} · {activeSelection}</p>
             </div>
             <button onClick={clearStudent} className="text-slate-400 hover:text-red-500 text-xl font-bold leading-none transition">×</button>
           </div>

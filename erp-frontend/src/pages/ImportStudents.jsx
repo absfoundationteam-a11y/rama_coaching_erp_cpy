@@ -1,15 +1,20 @@
 import { useState, useRef } from "react"
 import * as XLSX from "xlsx"
 import Sidebar from "../components/Sidebar"
+import { useBranch } from "../context/BranchContext"
 import { importStudentsAPI } from "../api"
 
 const REQUIRED_COLS = ["name", "phone"]
-const OPTIONAL_COLS = [
+const OPTIONAL_COLS_BASE = [
   "father_name", "dob", "email", "parent_phone",
   "permanent_address", "local_address", "course", "batch", "fees", "fees_paid",
   "school_college_name", "medium", "admission_date", "photo"
 ]
-const ALL_COLS = [...REQUIRED_COLS, ...OPTIONAL_COLS]
+const OPTIONAL_COLS_BATCH = [
+  "father_name", "dob", "email", "parent_phone",
+  "permanent_address", "local_address", "course", "batch", "fees", "fees_paid",
+  "school_college_name", "medium", "admission_date", "photo"
+]
 const VALID_MEDIUMS = ["hindi", "english"]
 const MAX_FILE_SIZE_MB = 5
 
@@ -59,8 +64,8 @@ function validateRow(row) {
   return errors
 }
 
-function downloadTemplate() {
-  const headers = ALL_COLS
+function downloadTemplate(allCols) {
+  const headers = allCols
   const sample = [{
     name: "Ram Kumar",
     father_name: "Shyam Kumar",
@@ -85,6 +90,11 @@ function downloadTemplate() {
 }
 
 export default function ImportStudents() {
+  const { activeBranch } = useBranch() || {}
+  const enableBatch = activeBranch?.enableBatch ?? true
+  const OPTIONAL_COLS = enableBatch ? OPTIONAL_COLS_BATCH : OPTIONAL_COLS_BASE
+  const ALL_COLS = [...REQUIRED_COLS, ...OPTIONAL_COLS]
+
   const [preview, setPreview] = useState([])
   const [rowErrors, setRowErrors] = useState({})
   const [fileName, setFileName] = useState("")
@@ -244,7 +254,7 @@ export default function ImportStudents() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-slate-800">Import Students</h2>
           <button
-            onClick={downloadTemplate}
+            onClick={() => downloadTemplate(ALL_COLS)}
             className="btn-success"
           >
             Download Template

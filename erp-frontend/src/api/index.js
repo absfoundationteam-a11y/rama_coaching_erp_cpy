@@ -24,6 +24,10 @@ API.interceptors.response.use(
   }
 );
 
+export function setAPIBaseURL(url) {
+  API.defaults.baseURL = url
+}
+
 // ─── Auth ────────────────────────────────────────────────────
 export const loginAPI = (data) => API.post("/login", data);
 export const registerAPI = (data) => API.post("/register", data);
